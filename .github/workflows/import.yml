@@ -1,1 +1,49 @@
+name: Import Automatique DefectDojo
 
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  semgrep-scan:
+    name: Execution du scan Semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Lancer le scan SAST
+        run: |
+          mkdir -p semgrep/results
+          semgrep --config auto --error --json --output=semgrep/results/semgrep.json
+
+      - name: Archiver le rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep/results/
+
+  import-defectdojo:
+    name: Envoi du rapport a DefectDojo
+    needs: semgrep-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le rapport
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-results
+
+      - name: Upload sur DefectDojo
+        uses: alvacoder/defectdojo-upload@v1.0.0
+        with:
+          defectdojo_url: ${{ secrets.DEFECTDOJO_URL }}
+          defectdojo_api_key: ${{ secrets.DEFECTDOJO_API_KEY }}
+          defectdojo_product_type: 'Research and Development'
+          defectdojo_product: 'Test Project'
+          defectdojo_environment_type: 'Development'
+          defectdojo_scan_type: 'Semgrep JSON Report'
+          defectdojo_engagement_name: 'Automated CI Scan'
+          scan_results_file_name: 'semgrep.json'
